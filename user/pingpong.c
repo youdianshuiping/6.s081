@@ -12,8 +12,8 @@ int main(void)
         //child
         char buf[5];
         read(p[0],buf,4);
-        buf[4]='\0';
-        printf("%d:received %s\n",getpid(),buf);
+    buf[4]='\0';
+    printf("%d: received %s\n", getpid(), buf);
         write(p[1],"pong",4);
         close(p[1]);
         close(p[0]);
@@ -27,9 +27,9 @@ int main(void)
         wait(0);
         char buf[5];
         read(p[0],buf,4);
-        buf[4]='\0';
-        close(p[0]);
-        printf("%d:received %s\n",getpid(),buf);
+    buf[4]='\0';
+    close(p[0]);
+    printf("%d: received %s\n", getpid(), buf);
         exit(0);
     }
 }
