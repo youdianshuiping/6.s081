@@ -296,6 +296,9 @@ fork(void)
   }
   np->sz = p->sz;
 
+  //copy trace_mask from parent to child.
+  np->trace_mask = p->trace_mask;
+
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
 
@@ -681,3 +684,15 @@ procdump(void)
     printf("\n");
   }
 }
+
+uint64 get_used_proc()
+{
+    struct proc *p;
+    uint64 n=0;
+    for(p=proc;p<&proc[NPROC];++p)
+    {
+        if(p->state!=UNUSED)n++;
+    }
+    return n;
+}
+
