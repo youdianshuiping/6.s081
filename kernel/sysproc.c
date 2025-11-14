@@ -83,8 +83,22 @@ sys_pgaccess(void)
   argint(1,&n);
   argaddr(2,&abit);
 
-  if(n>(2>>27)-1)return -1;
-  char* buf[n];
+  if(addr>MAXVA||n<0)return -1;
+  if(n>64)return -1;
+  uint64 buf=0;
+  pte_t *pte;
+  struct proc* p=myproc();
+  for(int i=0;i<n;i++)
+  {
+    pte=walk(p->pagetable,addr+i*PGSIZE,0);
+    if(pte==0)return -1;
+    if(*pte & PTE_A)
+    {
+      buf|=1<<i;
+      *pte &=~PTE_A;
+    }
+  }
+  copyout(p->pagetable,abit,(char*)(&buf),n);
   return 0;
 }
 #endif
