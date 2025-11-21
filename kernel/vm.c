@@ -302,26 +302,37 @@ uvmfree(pagetable_t pagetable, uint64 sz)
 // physical memory.
 // returns 0 on success, -1 on failure.
 // frees any allocated pages on failure.
+extern int kmemcnt[];
 int
 uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 {
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+  //char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
-      panic("uvmcopy: pte should exist");
+      panic("uvmcopy: pte should exist");\
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
+    if((*pte & PTE_W))
+    {
+      // make read-only copy on write
+      *pte &= ~PTE_W;
+      *pte |= PTE_COW;
+    }
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    kmemcnt[pa/PGSIZE]++;
+    //if((mem = kalloc()) == 0)
+    //  goto err;
+    //memmove(mem, (char*)pa, PGSIZE);
+    // if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
+    //   kfree(mem);
+    //   goto err;
+    // }
+      if(mappages(new, i, PGSIZE, pa, flags) != 0){
       goto err;
     }
   }
@@ -355,6 +366,35 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
+    pte_t *pte = walk(pagetable, va0, 0);
+    if(pte == 0)
+      return -1;
+    if((*pte & (PTE_COW|PTE_V|PTE_U))==(PTE_COW|PTE_V|PTE_U))
+    {
+      uint64 pa = PTE2PA(*pte);
+      if(kmemcnt[pa/PGSIZE]>1)
+      {
+        char *mem = kalloc();
+        if(mem==0)
+        {
+          return -1;
+        }
+        else 
+        {
+          memmove(mem, (char*)pa , PGSIZE);
+          kmemcnt[pa/PGSIZE]--;
+          *pte = PA2PTE((uint64)mem) | PTE_FLAGS(*pte) | PTE_W;
+          *pte &= (~PTE_COW);
+          sfence_vma();
+        }
+      }
+      else 
+      {
+        *pte |= PTE_W;
+        *pte &= (~PTE_COW);
+        sfence_vma();
+      }
+    }
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;
