@@ -35,6 +35,7 @@ trapinithart(void)
 //
 
 extern int kmemcnt[];
+extern struct spinlock kmemcntlock;
 
 void
 usertrap(void)
@@ -75,6 +76,13 @@ usertrap(void)
   if(r_scause()==15)
   {
     uint64 va = r_stval();
+    if(va>=MAXVA)
+    {
+      printf("usertrap(): page fault va %p pid=%d\n", va, p->pid);
+      setkilled(p);
+    }
+    else 
+    {
     pte_t *pte = walk(p->pagetable, va, 0);
     if(pte == 0)
     {
@@ -83,8 +91,11 @@ usertrap(void)
     else if((*pte & (PTE_COW|PTE_V|PTE_U))==(PTE_COW|PTE_V|PTE_U))
     {
       uint64 pa = PTE2PA(*pte);
+      acquire(&kmemcntlock);
       if(kmemcnt[pa/PGSIZE]>1)
       {
+        kmemcnt[pa/PGSIZE]--;
+        release(&kmemcntlock);
         char *mem = kalloc();
         if(mem==0)
         {
@@ -93,7 +104,7 @@ usertrap(void)
         else 
         {
           memmove(mem, (char*)pa , PGSIZE);
-          kmemcnt[pa/PGSIZE]--;
+          
           *pte = PA2PTE((uint64)mem) | PTE_FLAGS(*pte) | PTE_W;
           *pte &= (~PTE_COW);
           sfence_vma();
@@ -101,6 +112,7 @@ usertrap(void)
       }
       else 
       {
+        release(&kmemcntlock);
         *pte |= PTE_W;
         *pte &= (~PTE_COW);
         sfence_vma();
@@ -110,6 +122,7 @@ usertrap(void)
     {
       setkilled(p);
     }
+   }
   }
    else
     {
